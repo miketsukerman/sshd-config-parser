@@ -12,8 +12,6 @@
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
-#include <openssl/ssl.h>
-#include <openssl/x509.h>
 
 namespace pegtl = TAO_PEGTL_NAMESPACE;
 
@@ -45,7 +43,7 @@ namespace openssl
         /// @brief Creates a new private RSA key
         ///
         /// @return true on success, false otherwise
-        virtual bool generate() = 0;
+        // virtual bool generate() = 0;
 
         /// @brief Checks if the key is valid
         ///
@@ -90,13 +88,14 @@ namespace openssl
             return buffer.str();
         }
     }
+
     class EcdsaKeyPair final : public KeyPair
     {
 
     public:
         EcdsaKeyPair()
         {
-            generate();
+            // generate();
         }
 
         EcdsaKeyPair(const std::string &private_key, const std::string &public_key) : KeyPair(private_key, public_key)
@@ -110,104 +109,97 @@ namespace openssl
         /// @brief Creates a new private RSA key
         ///
         /// @return true on success, false otherwise
-        bool generate() override
-        {
-            OpenSSL_add_all_algorithms();
-            ERR_load_crypto_strings();
+        // bool generate() override
+        // {
+        //     OpenSSL_add_all_algorithms();
+        //     ERR_load_crypto_strings();
 
-            // Create an EVP key context
-            openssl::EnvelopePrivateKeyContextUPtr ctx(EVP_PKEY_CTX_new_id(EVP_PKEY_EC, nullptr), ::EVP_PKEY_CTX_free);
-            if (!ctx)
-            {
-                return false;
-            }
+        //     // Create an EVP key context
+        //     openssl::EnvelopePrivateKeyContextUPtr ctx(EVP_PKEY_CTX_new_id(EVP_PKEY_EC, nullptr), ::EVP_PKEY_CTX_free);
+        //     if (!ctx)
+        //     {
+        //         return false;
+        //     }
 
-            // Initialize the key generation context
-            if (EVP_PKEY_keygen_init(ctx.get()) <= 0)
-            {
-                return false;
-            }
+        //     // Initialize the key generation context
+        //     if (EVP_PKEY_keygen_init(ctx.get()) <= 0)
+        //     {
+        //         return false;
+        //     }
 
-            //  We're going to use the ANSI X9.62 Prime 256v1 curve
-            if (EVP_PKEY_CTX_set_ec_paramgen_curve_nid(ctx.get(), NID_X9_62_prime256v1) != 1)
-            {
-                return false;
-            }
+        //     //  We're going to use the ANSI X9.62 Prime 256v1 curve
+        //     if (EVP_PKEY_CTX_set_ec_paramgen_curve_nid(ctx.get(), NID_X9_62_prime256v1) != 1)
+        //     {
+        //         return false;
+        //     }
 
-            // Generate the key pair
-            EVP_PKEY *keyTemp = nullptr;
-            if (EVP_PKEY_keygen(ctx.get(), &keyTemp) <= 0)
-            {
-                return false;
-            }
+        //     // Generate the key pair
+        //     EVP_PKEY *keyTemp = nullptr;
+        //     if (EVP_PKEY_keygen(ctx.get(), &keyTemp) <= 0)
+        //     {
+        //         return false;
+        //     }
 
-            openssl::EnvelopePrivateKeyUPtr key(keyTemp, ::EVP_PKEY_free);
+        //     openssl::EnvelopePrivateKeyUPtr key(keyTemp, ::EVP_PKEY_free);
 
-            // Create a memory BIO to store the private key
-            openssl::BasicInputOutputUPtr memPrBio(BIO_new(BIO_s_mem()), BIO_free_all);
-            openssl::BasicInputOutputUPtr memPbBio(BIO_new(BIO_s_mem()), BIO_free_all);
-            if (!memPrBio && !memPbBio)
-            {
-                return false;
-            }
+        //     // Create a memory BIO to store the private key
+        //     openssl::BasicInputOutputUPtr memPrBio(BIO_new(BIO_s_mem()), BIO_free_all);
+        //     openssl::BasicInputOutputUPtr memPbBio(BIO_new(BIO_s_mem()), BIO_free_all);
+        //     if (!memPrBio && !memPbBio)
+        //     {
+        //         return false;
+        //     }
 
-            // Write the private key to the memory BIO
-            if (!PEM_write_bio_PrivateKey(memPrBio.get(), key.get(), nullptr, nullptr, 0, nullptr, nullptr))
-            {
-                return false;
-            }
+        //     // Write the private key to the memory BIO
+        //     if (!PEM_write_bio_PrivateKey(memPrBio.get(), key.get(), nullptr, nullptr, 0, nullptr, nullptr))
+        //     {
+        //         return false;
+        //     }
 
-            // Write the public key to the memory BIO
-            if (!PEM_write_bio_PUBKEY(memPbBio.get(), key.get()))
-            {
-                return false;
-            }
+        //     // Write the public key to the memory BIO
+        //     if (!PEM_write_bio_PUBKEY(memPbBio.get(), key.get()))
+        //     {
+        //         return false;
+        //     }
 
-            // Read the private key from the memory BIO to a string
-            BUF_MEM *memBuf;
-            BIO_get_mem_ptr(memPrBio.get(), &memBuf);
+        //     // Read the private key from the memory BIO to a string
+        //     BUF_MEM *memBuf;
+        //     BIO_get_mem_ptr(memPrBio.get(), &memBuf);
 
-            _private = std::string(memBuf->data, memBuf->length);
+        //     _private = std::string(memBuf->data, memBuf->length);
 
-            BIO_get_mem_ptr(memPbBio.get(), &memBuf);
+        //     BIO_get_mem_ptr(memPbBio.get(), &memBuf);
 
-            _public = std::string(memBuf->data, memBuf->length);
+        //     _public = std::string(memBuf->data, memBuf->length);
 
-            // Clean up OpenSSL
-            EVP_cleanup();
-            ERR_free_strings();
+        //     // Clean up OpenSSL
+        //     EVP_cleanup();
+        //     ERR_free_strings();
 
-            return true;
-        }
+        //     return true;
+        // }
 
         /// @brief Returns the key as an openssl EVP_PKEY object
         ///
         /// @return the key
-        openssl::EnvelopePrivateKeyUPtr toOpenssl() const override
+        [[nodiscard]] openssl::EnvelopePrivateKeyUPtr toOpenssl() const override
         {
-            OpenSSL_add_all_algorithms();
-            ERR_load_crypto_strings();
-
             // Create a memory BIO to read the private key from the string
             openssl::BasicInputOutputUPtr memBio(BIO_new_mem_buf(_private.c_str(), -1), BIO_free_all);
             if (!memBio)
             {
-                return openssl::EnvelopePrivateKeyUPtr(nullptr, ::EVP_PKEY_free);
+                return {nullptr, ::EVP_PKEY_free};
             }
 
             // Read the private key from the memory BIO
             EC_KEY *ecKey = PEM_read_bio_ECPrivateKey(memBio.get(), nullptr, nullptr, nullptr);
             if (!ecKey)
             {
-                return openssl::EnvelopePrivateKeyUPtr(nullptr, ::EVP_PKEY_free);
+                return {nullptr, ::EVP_PKEY_free};
             }
 
             openssl::EnvelopePrivateKeyUPtr key(EVP_PKEY_new(), ::EVP_PKEY_free);
             EVP_PKEY_assign_EC_KEY(key.get(), ecKey);
-
-            // Clean up OpenSSL
-            EVP_cleanup();
-            ERR_free_strings();
 
             return key;
         }
@@ -217,10 +209,15 @@ namespace openssl
 
 namespace sshd
 {
+    struct HostKey
+    {
+        std::filesystem::path private_key{};
+        std::filesystem::path public_key{};
+    };
 
     struct sshd_config
     {
-        std::vector<std::filesystem::path> host_keys{};
+        std::vector<HostKey> host_keys{};
     };
 
 } // namespace
@@ -312,11 +309,16 @@ namespace sshd::config
             if( !in.empty() ) {
                 std::stringstream ss( in.string() );
 
-                std::string param, key_path;
+                std::string param, private_key_path, public_key_path;
 
-                ss >> param >> key_path;
+                ss >> param >> private_key_path;
 
-                config.host_keys.push_back(key_path);
+                public_key_path = private_key_path + std::string(".pub");
+
+                config.host_keys.push_back(sshd::HostKey{
+                    .private_key=private_key_path,
+                    .public_key=public_key_path
+                });
             }
         }
     };
@@ -348,7 +350,9 @@ int main(int argc, char** argv) {
 
     for(auto & key: sshdConfig.host_keys) 
     {
-        std::cout << key << std::endl;
+        std::cout << key.private_key << "\t" << key.public_key << std::endl;
+
+        openssl::EcdsaKeyPair keyPair(key.private_key, key.public_key);
     }
 
     return 0;
