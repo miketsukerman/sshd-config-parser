@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 #include <fstream>
+#include <regex>
 
 #include <tao/pegtl/contrib/uri.hpp>
 #include <tao/pegtl.hpp>
@@ -14,6 +15,32 @@
 #include <openssl/pem.h>
 
 namespace pegtl = TAO_PEGTL_NAMESPACE;
+
+namespace
+{
+    std::string readfile(const std::filesystem::path filename)
+    {
+        std::fstream stream;
+
+        if (!std::filesystem::exists(filename))
+        {
+            std::cout << filename << " doesn't exists" << std::endl;
+        }
+
+        stream.open(filename, std::ios::in);
+
+        if (!stream.is_open())
+        {
+            std::cout << "can't read from " << filename << std::endl;
+            return {};
+        }
+
+        std::stringstream buffer;
+        buffer << stream.rdbuf();
+
+        return buffer.str();
+    }
+}
 
 namespace openssl
 {
@@ -70,24 +97,6 @@ namespace openssl
         std::string _private;
         std::string _public;
     };
-
-    namespace
-    {
-        std::string readfile(const std::filesystem::path filename)
-        {
-            std::ifstream stream(filename, std::ios::in);
-
-            if (stream.is_open())
-            {
-                return {};
-            }
-
-            std::stringstream buffer;
-            buffer << stream.rdbuf();
-
-            return buffer.str();
-        }
-    }
 
     class EcdsaKeyPair final : public KeyPair
     {
@@ -188,6 +197,7 @@ namespace openssl
             openssl::BasicInputOutputUPtr memBio(BIO_new_mem_buf(_private.c_str(), -1), BIO_free_all);
             if (!memBio)
             {
+                std::cout << "failed to load key into memory" << std::endl;
                 return {nullptr, ::EVP_PKEY_free};
             }
 
@@ -195,6 +205,7 @@ namespace openssl
             EC_KEY *ecKey = PEM_read_bio_ECPrivateKey(memBio.get(), nullptr, nullptr, nullptr);
             if (!ecKey)
             {
+                std::cout << "failed to read privte key" << std::endl;
                 return {nullptr, ::EVP_PKEY_free};
             }
 
@@ -218,6 +229,8 @@ namespace sshd
     struct sshd_config
     {
         std::vector<HostKey> host_keys{};
+        std::filesystem::path host_ceritificate{};
+        std::filesystem::path trusted_user_ca_keys{};
     };
 
 } // namespace
@@ -253,6 +266,12 @@ namespace sshd::config
     struct HostKey_key : TAO_PEGTL_STRING("HostKey") {};
     struct HostKey : seq < HostKey_key, seps, path> {};
 
+    struct HostCertificate_key : TAO_PEGTL_STRING("HostCertificate") {};
+    struct HostCertificate : seq < HostCertificate_key, seps, path> {};
+
+    struct TrustedUserCAKeys_key : TAO_PEGTL_STRING("TrustedUserCAKeys") {};
+    struct TrustedUserCAKeys : seq < TrustedUserCAKeys_key, seps, path> {};
+
     struct PermitRootLogin_key : TAO_PEGTL_STRING("PermitRootLogin") {};
     struct PermitRootLogin : seq < PermitRootLogin_key, seps, Boolean> {};
 
@@ -282,6 +301,8 @@ namespace sshd::config
 
     struct parameters : sor<
             HostKey,
+            HostCertificate,
+            TrustedUserCAKeys,
             PermitRootLogin,
             AuthorizedKeysFile,
             PermitEmptyPasswords,
@@ -299,6 +320,38 @@ namespace sshd::config
     template< typename Rule >
     struct action
     {};
+
+    template<>
+    struct action< HostCertificate >
+    {
+        template< typename ActionInput >
+        static void apply( const ActionInput& in, sshd::sshd_config & config )
+        {
+            std::stringstream ss( in.string() );
+
+            std::string param, key_path;
+
+            ss >> param >> key_path;
+
+            config.host_ceritificate = key_path;
+        }
+    };
+
+    template<>
+    struct action< TrustedUserCAKeys >
+    {
+        template< typename ActionInput >
+        static void apply( const ActionInput& in, sshd::sshd_config & config )
+        {
+            std::stringstream ss( in.string() );
+
+            std::string param, ca_path;
+
+            ss >> param >> ca_path;
+
+            config.trusted_user_ca_keys = ca_path;
+        }
+    };
 
     template<>
     struct action< HostKey >
@@ -348,11 +401,27 @@ int main(int argc, char** argv) {
         }
     }
 
+    std::regex pattern(R"(\becdsa-sha2-nistp256\b)");
+    std::smatch m;
     for(auto & key: sshdConfig.host_keys) 
     {
-        std::cout << key.private_key << "\t" << key.public_key << std::endl;
+        // openssl::EcdsaKeyPair keyPair(key.private_key, key.public_key);
+        // auto & [private_key, public_key] = keyPair.toString();
 
-        openssl::EcdsaKeyPair keyPair(key.private_key, key.public_key);
+        std::string public_key = ::readfile(key.public_key);
+        
+
+        // std::cout << public_key << std::endl;
+
+        auto is_ecdsa = std::regex_search(public_key, m , pattern);
+
+        if(is_ecdsa)
+            std::cout << key.public_key << std::endl;
+
+        // std::cout << key.private_key << "\t" << key.public_key << std::endl
+        //           << "\t ecdsa: " << is_ecdsa  << std::endl 
+        //           << private_key << std::endl << public_key
+        //           << std::endl;
     }
 
     return 0;
